@@ -1,9 +1,12 @@
 const tf = require('@tensorflow/tfjs');
 const path = require("path");
 // CPU computation
-require('@tensorflow/tfjs-node');
+const tfn = require('@tensorflow/tfjs-node');
 //const fs = require('file-system');
-const { createCanvas, loadImage } = require('canvas');
+// for training -- as of 2024, canvas is experiencing versioning issues with node-gyp, please refer to README for more details
+// const { createCanvas, loadImage } = require('canvas');
+const createCanvas = (var1, var2) => null;
+const loadImage = (var1) => null;
 const express = require('express');
 const bodyParser = require('body-parser');
 const app = express();
@@ -13,16 +16,15 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
  
 app.post('/model', (req, res) => {
-    
     let mpromise = loadModel();
     mpromise.then((model)=>{
         let temp = Uint8Array.from(req.body.xs);
         let test = convertToTensors(temp,[0,0,0,0,0,0,0,0,1,0]);
         let ret = Array.from(model.predict(test.xs).dataSync());
         res.send({acc:ret});
-
+    }, (reason) => {
+        res.send({rejected: reason})
     });
-
 });
 
 if (process.env.NODE_ENV === 'production') {
@@ -49,8 +51,14 @@ app.listen(port, () => console.log(`Listening on port ${port}`));
 // Reloads model from local files
 async function loadModel(){
     return new Promise(async function(res,rej){
-        let newmodel = await tf.loadModel('file://./model/model.json','file://./model/weights.bin')
-        res(newmodel);
+        try {
+            const modelHandler = tfn.io.fileSystem('./model/model.json');
+            const weightsHandler = tfn.io.fileSystem('./model/weights.bin');
+            let newmodel = await tf.loadModel(modelHandler, weightsHandler);
+            res(newmodel);
+        } catch (err) {
+            rej(err);
+        }
     })
 }
 
